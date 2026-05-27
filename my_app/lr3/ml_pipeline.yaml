@@ -1,0 +1,52 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  generateName: ml-pipeline-
+  annotations: {pipelines.kubeflow.org/kfp_sdk_version: 1.8.24, pipelines.kubeflow.org/pipeline_compilation_time: '2026-05-27T23:08:18.461589',
+    pipelines.kubeflow.org/pipeline_spec: '{"name": "Ml pipeline"}'}
+  labels: {pipelines.kubeflow.org/kfp_sdk_version: 1.8.24}
+spec:
+  entrypoint: ml-pipeline
+  templates:
+  - name: evaluate-model
+    container:
+      command: [python, -c, print("Metrics 0.95")]
+      image: python:3.9-slim
+    metadata:
+      labels:
+        pipelines.kubeflow.org/kfp_sdk_version: 1.8.24
+        pipelines.kubeflow.org/pipeline-sdk-type: kfp
+        pipelines.kubeflow.org/enable_caching: "true"
+  - name: load-data
+    container:
+      command: [python, -c, print("Data ready")]
+      image: python:3.9-slim
+    outputs:
+      artifacts:
+      - {name: load-data-data_output, path: /tmp/output.txt}
+    metadata:
+      labels:
+        pipelines.kubeflow.org/kfp_sdk_version: 1.8.24
+        pipelines.kubeflow.org/pipeline-sdk-type: kfp
+        pipelines.kubeflow.org/enable_caching: "true"
+  - name: ml-pipeline
+    dag:
+      tasks:
+      - {name: evaluate-model, template: evaluate-model}
+      - {name: load-data, template: load-data}
+      - {name: train-model, template: train-model}
+  - name: train-model
+    container:
+      command: [python, -c, print("Model trained")]
+      image: python:3.9-slim
+    outputs:
+      artifacts:
+      - {name: train-model-train_output, path: /tmp/output.txt}
+    metadata:
+      labels:
+        pipelines.kubeflow.org/kfp_sdk_version: 1.8.24
+        pipelines.kubeflow.org/pipeline-sdk-type: kfp
+        pipelines.kubeflow.org/enable_caching: "true"
+  arguments:
+    parameters: []
+  serviceAccountName: pipeline-runner

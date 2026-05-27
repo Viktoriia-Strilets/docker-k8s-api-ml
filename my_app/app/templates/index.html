@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>My Simple App</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/semantic-ui@2.4.2/dist/semantic.min.css">
+    <style>
+        .completed-task { text-decoration: line-through; color: gray; }
+        .todo-item { display: flex; justify-content: space-between; align-items: center; }
+    </style>
+</head>
+<body>
+    <div style="margin-top: 50px; max-width: 600px;" class="ui container">
+        <h1 class="ui center aligned icon header">
+            <i class="tasks icon"></i>
+            Мій список завдань
+        </h1>
+
+        <!-- Форма додавання -->
+        <div class="ui segment secondary">
+            <form class="ui form" action="/add" method="post">
+                <div class="ui action input fluid">
+                    <input type="text" name="title" placeholder="Що потрібно зробити?" required>
+                    <button class="ui blue right labeled icon button" type="submit">
+                        <i class="plus icon"></i> Додати
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Список завдань -->
+        <div class="ui segments">
+            {% for todo in todo_list %}
+            <div class="ui segment todo-item">
+                <div>
+                    <span class="ui circular label">{{ loop.index }}</span>
+                    <span class="{% if todo.completed %}completed-task{% endif %}" style="font-size: 1.2em; margin-left: 10px;">
+                        {{ todo.title }}
+                    </span>
+                </div>
+                
+                <div>
+                    <!-- Кнопка Змінити статус -->
+                    <a href="/update/{{ todo.id }}" class="ui icon button {% if todo.completed %}green{% else %}basic{% endif %}" title="Змінити статус">
+                        <i class="check icon"></i>
+                    </a>
+                    <!-- Кнопка Видалити -->
+                    <a href="/delete/{{ todo.id }}" class="ui icon red basic button" title="Видалити">
+                        <i class="trash icon"></i>
+                    </a>
+                </div>
+            </div>
+            {% else %}
+            <div class="ui segment center aligned">
+                <p>Список порожній. Час щось запланувати!</p>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html>

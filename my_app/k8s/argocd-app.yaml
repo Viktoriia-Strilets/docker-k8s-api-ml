@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: my-app-argo
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: 'https://github.com/Viktoriia-Strilets/docker-k8s-api-app-demo'
+    targetRevision: HEAD
+    path: my_app/k8s/lm
+  destination:
+    server: 'https://kubernetes.default.svc'
+    namespace: kubeflow 
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
