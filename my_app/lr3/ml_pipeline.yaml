@@ -1,83 +1,172 @@
-apiVersion: argoproj.io/v1alpha1
-kind: Workflow
-metadata:
-  generateName: fastapi-ml-ops-pipeline-
-  annotations: {pipelines.kubeflow.org/kfp_sdk_version: 1.8.24, pipelines.kubeflow.org/pipeline_compilation_time: '2026-05-28T07:35:04.936830',
-    pipelines.kubeflow.org/pipeline_spec: '{"description": "Sequential MLOps pipeline
-      compatible with Python 3.13 and Kubeflow v2 Engines.", "name": "FastAPI-ML-Ops-Pipeline"}'}
-  labels: {pipelines.kubeflow.org/kfp_sdk_version: 1.8.24}
-spec:
-  entrypoint: fastapi-ml-ops-pipeline
-  templates:
-  - name: evaluate-model
-    container:
-      args: ['{{inputs.parameters.train-model-model_output}}']
-      command: [python, -c, 'print("Reading incoming trained model configuration...");
-          print("Metrics evaluation process completed."); print("Metrics: Accuracy
-          = 0.95")']
-      image: python:3.9-slim
-    inputs:
-      parameters:
-      - {name: train-model-model_output}
-    metadata:
-      labels:
-        pipelines.kubeflow.org/kfp_sdk_version: 1.8.24
-        pipelines.kubeflow.org/pipeline-sdk-type: kfp
-        pipelines.kubeflow.org/enable_caching: "true"
-  - name: fastapi-ml-ops-pipeline
-    dag:
-      tasks:
-      - name: evaluate-model
-        template: evaluate-model
-        dependencies: [train-model]
-        arguments:
-          parameters:
-          - {name: train-model-model_output, value: '{{tasks.train-model.outputs.parameters.train-model-model_output}}'}
-      - {name: load-data, template: load-data}
-      - name: train-model
-        template: train-model
-        dependencies: [load-data]
-        arguments:
-          parameters:
-          - {name: load-data-data_output, value: '{{tasks.load-data.outputs.parameters.load-data-data_output}}'}
-  - name: load-data
-    container:
-      command: [python, -c, 'import os; os.makedirs("/tmp", exist_ok=True); f = open("/tmp/output.txt",
-          "w"); f.write("raw_dance_dataset_v1"); f.close(); print("Data ready and
-          written successfully to /tmp/output.txt")']
-      image: python:3.9-slim
-    outputs:
-      parameters:
-      - name: load-data-data_output
-        valueFrom: {path: /tmp/output.txt}
+# PIPELINE DEFINITION
+# Name: fastapi-ml-ops-pipeline-v2
+# Description: Modern pipeline based on KFP v2
+components:
+  comp-evaluate-model:
+    executorLabel: exec-evaluate-model
+    inputDefinitions:
       artifacts:
-      - {name: load-data-data_output, path: /tmp/output.txt}
-    metadata:
-      labels:
-        pipelines.kubeflow.org/kfp_sdk_version: 1.8.24
-        pipelines.kubeflow.org/pipeline-sdk-type: kfp
-        pipelines.kubeflow.org/enable_caching: "true"
-  - name: train-model
-    container:
-      args: ['{{inputs.parameters.load-data-data_output}}']
-      command: [python, -c, 'import os; os.makedirs("/tmp", exist_ok=True); f = open("/tmp/model.txt",
-          "w"); f.write("trained_model_weights_v1"); f.close(); print("Model trained
-          successfully. Weights saved to /tmp/model.txt")']
-      image: python:3.9-slim
-    inputs:
-      parameters:
-      - {name: load-data-data_output}
-    outputs:
-      parameters:
-      - name: train-model-model_output
-        valueFrom: {path: /tmp/model.txt}
+        model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+  comp-load-data:
+    executorLabel: exec-load-data
+    outputDefinitions:
       artifacts:
-      - {name: train-model-model_output, path: /tmp/model.txt}
-    metadata:
-      labels:
-        pipelines.kubeflow.org/kfp_sdk_version: 1.8.24
-        pipelines.kubeflow.org/pipeline-sdk-type: kfp
-        pipelines.kubeflow.org/enable_caching: "true"
-  arguments:
-    parameters: []
-  serviceAccountName: pipeline-runner
+        output_dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+  comp-train-model:
+    executorLabel: exec-train-model
+    inputDefinitions:
+      artifacts:
+        dataset:
+          artifactType:
+            schemaTitle: system.Dataset
+            schemaVersion: 0.0.1
+    outputDefinitions:
+      artifacts:
+        output_model:
+          artifactType:
+            schemaTitle: system.Model
+            schemaVersion: 0.0.1
+deploymentSpec:
+  executors:
+    exec-evaluate-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - evaluate_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef evaluate_model(model: dsl.Input[Model]):\n    with open(model.path,\
+          \ 'r') as f:\n        weights = f.read()\n    print(f\"Weights analysis:\
+          \ {weights}\")\n    print(\"Metrics: Accuracy = 0.96\")\n\n"
+        image: python:3.9-slim
+    exec-load-data:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - load_data
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef load_data(output_dataset: Output[Dataset]):\n    with open(output_dataset.path,\
+          \ 'w') as f:\n        f.write(\"raw_dance_dataset_content_v2\")\n    print(\"\
+          Data loaded successfully.\")\n\n"
+        image: python:3.9-slim
+    exec-train-model:
+      container:
+        args:
+        - --executor_input
+        - '{{$}}'
+        - --function_to_execute
+        - train_model
+        command:
+        - sh
+        - -c
+        - "\nif ! [ -x \"$(command -v pip)\" ]; then\n    python3 -m ensurepip ||\
+          \ python3 -m ensurepip --user || apt-get install python3-pip\nfi\n\nPIP_DISABLE_PIP_VERSION_CHECK=1\
+          \ python3 -m pip install --quiet --no-warn-script-location 'kfp==2.16.1'\
+          \ '--no-deps' 'typing-extensions>=3.7.4,<5; python_version<\"3.9\"' && \"\
+          $0\" \"$@\"\n"
+        - sh
+        - -ec
+        - 'program_path=$(mktemp -d)
+
+
+          printf "%s" "$0" > "$program_path/ephemeral_component.py"
+
+          _KFP_RUNTIME=true python3 -m kfp.dsl.executor_main                         --component_module_path                         "$program_path/ephemeral_component.py"                         "$@"
+
+          '
+        - "\nimport kfp\nfrom kfp import dsl\nfrom kfp.dsl import *\nfrom typing import\
+          \ *\n\ndef train_model(dataset: dsl.Input[Dataset], output_model: Output[Model]):\n\
+          \    with open(dataset.path, 'r') as f:\n        data = f.read()\n\n   \
+          \ with open(output_model.path, 'w') as f:\n        f.write(\"trained_weights_based_on_\"\
+          \ + data)\n    print(\"Model trained successfully.\")\n\n"
+        image: python:3.9-slim
+pipelineInfo:
+  description: Modern pipeline based on KFP v2
+  name: fastapi-ml-ops-pipeline-v2
+root:
+  dag:
+    tasks:
+      evaluate-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-evaluate-model
+        dependentTasks:
+        - train-model
+        inputs:
+          artifacts:
+            model:
+              taskOutputArtifact:
+                outputArtifactKey: output_model
+                producerTask: train-model
+        taskInfo:
+          name: evaluate-model
+      load-data:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-load-data
+        taskInfo:
+          name: load-data
+      train-model:
+        cachingOptions:
+          enableCache: true
+        componentRef:
+          name: comp-train-model
+        dependentTasks:
+        - load-data
+        inputs:
+          artifacts:
+            dataset:
+              taskOutputArtifact:
+                outputArtifactKey: output_dataset
+                producerTask: load-data
+        taskInfo:
+          name: train-model
+schemaVersion: 2.1.0
+sdkVersion: kfp-2.16.1
