@@ -1,27 +1,55 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Workflow
 metadata:
-  generateName: ml-pipeline-
-  annotations: {pipelines.kubeflow.org/kfp_sdk_version: 1.8.24, pipelines.kubeflow.org/pipeline_compilation_time: '2026-05-27T23:08:18.461589',
-    pipelines.kubeflow.org/pipeline_spec: '{"name": "Ml pipeline"}'}
+  generateName: fastapi-ml-ops-pipeline-
+  annotations: {pipelines.kubeflow.org/kfp_sdk_version: 1.8.24, pipelines.kubeflow.org/pipeline_compilation_time: '2026-05-28T07:35:04.936830',
+    pipelines.kubeflow.org/pipeline_spec: '{"description": "Sequential MLOps pipeline
+      compatible with Python 3.13 and Kubeflow v2 Engines.", "name": "FastAPI-ML-Ops-Pipeline"}'}
   labels: {pipelines.kubeflow.org/kfp_sdk_version: 1.8.24}
 spec:
-  entrypoint: ml-pipeline
+  entrypoint: fastapi-ml-ops-pipeline
   templates:
   - name: evaluate-model
     container:
-      command: [python, -c, print("Metrics 0.95")]
+      args: ['{{inputs.parameters.train-model-model_output}}']
+      command: [python, -c, 'print("Reading incoming trained model configuration...");
+          print("Metrics evaluation process completed."); print("Metrics: Accuracy
+          = 0.95")']
       image: python:3.9-slim
+    inputs:
+      parameters:
+      - {name: train-model-model_output}
     metadata:
       labels:
         pipelines.kubeflow.org/kfp_sdk_version: 1.8.24
         pipelines.kubeflow.org/pipeline-sdk-type: kfp
         pipelines.kubeflow.org/enable_caching: "true"
+  - name: fastapi-ml-ops-pipeline
+    dag:
+      tasks:
+      - name: evaluate-model
+        template: evaluate-model
+        dependencies: [train-model]
+        arguments:
+          parameters:
+          - {name: train-model-model_output, value: '{{tasks.train-model.outputs.parameters.train-model-model_output}}'}
+      - {name: load-data, template: load-data}
+      - name: train-model
+        template: train-model
+        dependencies: [load-data]
+        arguments:
+          parameters:
+          - {name: load-data-data_output, value: '{{tasks.load-data.outputs.parameters.load-data-data_output}}'}
   - name: load-data
     container:
-      command: [python, -c, print("Data ready")]
+      command: [python, -c, 'import os; os.makedirs("/tmp", exist_ok=True); f = open("/tmp/output.txt",
+          "w"); f.write("raw_dance_dataset_v1"); f.close(); print("Data ready and
+          written successfully to /tmp/output.txt")']
       image: python:3.9-slim
     outputs:
+      parameters:
+      - name: load-data-data_output
+        valueFrom: {path: /tmp/output.txt}
       artifacts:
       - {name: load-data-data_output, path: /tmp/output.txt}
     metadata:
@@ -29,19 +57,22 @@ spec:
         pipelines.kubeflow.org/kfp_sdk_version: 1.8.24
         pipelines.kubeflow.org/pipeline-sdk-type: kfp
         pipelines.kubeflow.org/enable_caching: "true"
-  - name: ml-pipeline
-    dag:
-      tasks:
-      - {name: evaluate-model, template: evaluate-model}
-      - {name: load-data, template: load-data}
-      - {name: train-model, template: train-model}
   - name: train-model
     container:
-      command: [python, -c, print("Model trained")]
+      args: ['{{inputs.parameters.load-data-data_output}}']
+      command: [python, -c, 'import os; os.makedirs("/tmp", exist_ok=True); f = open("/tmp/model.txt",
+          "w"); f.write("trained_model_weights_v1"); f.close(); print("Model trained
+          successfully. Weights saved to /tmp/model.txt")']
       image: python:3.9-slim
+    inputs:
+      parameters:
+      - {name: load-data-data_output}
     outputs:
+      parameters:
+      - name: train-model-model_output
+        valueFrom: {path: /tmp/model.txt}
       artifacts:
-      - {name: train-model-train_output, path: /tmp/output.txt}
+      - {name: train-model-model_output, path: /tmp/model.txt}
     metadata:
       labels:
         pipelines.kubeflow.org/kfp_sdk_version: 1.8.24
