@@ -28,7 +28,7 @@ Write-Host "Creating namespace 'argocd'..." -ForegroundColor Green
 kubectl create namespace argocd
 
 Write-Host "Installing ArgoCD components..." -ForegroundColor Green
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml --server-side
 
 Write-Host "Waiting for ArgoCD deployments to be fully ready (dynamic wait)..." -ForegroundColor Yellow
 # Розумне очікування: скрипт чекатиме, поки сервер ArgoCD реально не підніметься
@@ -37,15 +37,15 @@ kubectl wait --namespace argocd --for=condition=available deployment/argocd-serv
 Write-Host "Applying ArgoCD Application manifest..." -ForegroundColor Green
 kubectl apply -f k8s/argocd-app.yaml -n argocd
 
-Write-Host "`n=== 5. Compiling ML Pipeline ===" -ForegroundColor Cyan
-if (Test-Path "lr3/pipeline.py") {
-    cd lr3
-    Write-Host "Running pipeline compiler..." -ForegroundColor Green
-    python pipeline.py
-    cd ..
-} else {
-    Write-Host "pipeline.py not found, skipping compilation." -ForegroundColor Yellow
-}
+Write-Host "`n=== 5. Deploying Kubeflow Pipelines Engine ===" -ForegroundColor Cyan
+Write-Host "Installing Kubeflow Standalone Components..." -ForegroundColor Green
+$env:PIPELINE_VERSION="2.15.0"
+kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/cluster-scoped-resources?ref=$PIPELINE_VERSION"
+kubectl wait --for condition=established --timeout=60s crd/applications.app.k8s.io
+kubectl apply -k "github.com/kubeflow/pipelines/manifests/kustomize/env/platform-agnostic?ref=$PIPELINE_VERSION"
+
+Write-Host "Kubeflow Engine Backend applied successfully." -ForegroundColor Green
+
 
 Write-Host "`n=== 6. Fetching access data ===" -ForegroundColor Cyan
 Write-Host "Waiting 15 seconds for application pods stabilization..." -ForegroundColor Yellow
@@ -67,3 +67,4 @@ Write-Host "ArgoCD Password: $ArgoPassword" -ForegroundColor Green
 Write-Host "`nTo access services, run these commands in separate windows:" -ForegroundColor Yellow
 Write-Host "API:  kubectl port-forward -n kubeflow svc/fastapi-svc 8000:8000" -ForegroundColor Gray
 Write-Host "Argo: kubectl port-forward svc/argocd-server -n argocd 8080:443" -ForegroundColor Gray
+Write-Host "Pipelines: kubectl port-forward -n kubeflow svc/ml-pipeline-ui 8085:80" -ForegroundColor Gray
